@@ -25,10 +25,31 @@ PM Daily 2 superworms</textarea>
 </form>
 
 <style>
+html {
+	height: 100%;
+}
+body {
+	margin: 0;
+	height: 100%;
+	display: grid;
+	grid-template-rows: auto 1fr
+}
+h1 {
+	margin: 1em;
+}
+form {
+	display: grid;
+	grid-template-rows: 1fr auto;
+}
 textarea {
-	width: 100%;
-	height: 10em;
 	margin: .5em 0;
+}
+button {
+	font-size: 2em;
+	padding: .5em;
+	text-align: center;
+	display: block;
+	margin: .5em auto 2em;
 }
 </style>
 
