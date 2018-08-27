@@ -5,22 +5,11 @@
 
 <h1>Animal Diet Card Formatter</h1>
 <form action="#">
-	<textarea id=input placeholder="Paste diet file here.">Species: Striped skunk
-House name: Stripes
-Local ID: 200534
-Date of birth: May 1, 2011
-Sex: M/C
-Routine: Lodge
-Location:
-
-AM Daily 14g small chop
-AM Daily 6g Mazuri insectivore
-PM Daily 14g small chop
-PM Daily 0.5mL EFAs
-PM Daily 18g Mazuri insectivore
-PM MWFSu 9g small mice
-PM TuThSa 1/2 hard boiled egg
-PM Daily 2 superworms</textarea>
+	<fieldset>
+		<legend>Upload file</legend>
+		<input type=file id=input-file>
+	</fieldset>
+	<textarea id=input placeholder="Or paste diet file here."></textarea>
 	<button id="format-diet" type=submit>Format!</button>
 </form>
 
@@ -39,7 +28,7 @@ h1 {
 }
 form {
 	display: grid;
-	grid-template-rows: 1fr auto;
+	grid-template-rows: auto 1fr auto;
 }
 textarea {
 	margin: .5em 0;
@@ -132,18 +121,30 @@ function append(el, ...children) {
 	return el;
 }
 
+find('#input-file').addEventListener('change', function(e) {
+	console.log("file-input change");
+	const files = e.target.files;
+	if(files.length != 1) return;
+	const reader = new FileReader();
+	reader.readAsText(files[0]);
+	reader.onload = e=>processDietFile(e.target.result);
+});
 document.addEventListener("submit", function(e) {
 	e.preventDefault();
+	processDietFile(find("#input").value);
+});
+
+function processDietFile(str) {
 	try {
-		dietFile = parseDietFile(find("#input").value);
+		const dietFile = parseDietFile(str);
+		document.body.innerHTML = "";
+		append(document.body, formatDietFile(dietFile));
 	} catch(e) {
 		document.body.innerHTML = "";
 		append(document.body, mk("pre", {}, e));
 		return;
 	}
-	document.body.innerHTML = "";
-	append(document.body, formatDietFile(dietFile));
-});
+}
 
 function parseDietFile(str) {
 	var lines = str.split("\n").map(x=>x.trim());
