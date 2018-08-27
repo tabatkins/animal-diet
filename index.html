@@ -1,0 +1,384 @@
+<!doctype html>
+<title>Animal Diet Card Formatter</title>
+<meta charset=utf-8>
+<meta name="viewport" content="width=device-width">
+
+<h1>Animal Diet Card Formatter</h1>
+<form action="#">
+	<textarea id=input placeholder="Paste diet file here.">Species: Striped skunk
+House name: Stripes
+Local ID: 200534
+Date of birth: May 1, 2011
+Sex: M/C
+Routine: Lodge
+Location:
+
+AM Daily 14g small chop
+AM Daily 6g Mazuri insectivore
+PM Daily 14g small chop
+PM Daily 0.5mL EFAs
+PM Daily 18g Mazuri insectivore
+PM MWFSu 9g small mice
+PM TuThSa 1/2 hard boiled egg
+PM Daily 2 superworms</textarea>
+	<button id="format-diet" type=submit>Format!</button>
+</form>
+
+<style>
+textarea {
+	width: 100%;
+	height: 10em;
+	margin: .5em 0;
+}
+</style>
+
+<script>
+function find(sel) { return document.querySelector(sel); }
+function findAll(sel) { return [...document.querySelectorAll(sel)]; }
+function isString(obj) { return (typeof obj == "string") || (obj instanceof String); }
+function partition(str, sep) {
+	const i = str.indexOf(sep);
+	if(i == -1) { return [str, undefined, ""]; }
+	return [str.slice(0, i), str[i], str.slice(i+1)];
+}
+function iter(obj) {
+	if(!obj) return [];
+	var it = obj[Symbol.iterator];
+	if(it) return it;
+	return Object.entries(obj);
+}
+Object.prototype.map = function(cb) {
+	var i = 0;
+	var ret = [];
+	for(var el of iter(this)) {
+		ret.push(cb(el, i, this));
+	}
+	return ret;
+}
+function split(str, sep, limit) {
+	if(!limit) return str.split(sep);
+	if(isString(sep)) {
+		var pieces = str.split(sep);
+		if(pieces.length <= limit) return pieces;
+		return pieces.slice(0, limit-1).push(pieces.slice(limit-1).join(sep));
+	}
+	// Otherwise, sep is a regex
+	limit = +limit;
+	str = str+"";
+	var pieces = [];
+	while(1) {
+		if(pieces.length == limit-1) {
+			pieces.push(str);
+			return pieces;
+		}
+		var match = sep.exec(str);
+		if(!match) {
+			pieces.push(str);
+			return pieces;
+		}
+		pieces.push(str.slice(0, match.index));
+		str = str.slice(match.index + match[0].length);
+	}
+}
+function mk(tagname, attrs, ...children) {
+	const el = document.createElement(tagname);
+	for(const [k,v] of iter(attrs)) {
+		if(k == "_props") {
+			for(const [k,v] of iter(v)) {
+				el[k] = v;
+			}
+		} else {
+			el.setAttribute(k, v);
+		}
+	}
+	append(el, children);
+	return el;
+}
+function append(el, ...children) {
+	for(const child of children) {
+		if(child instanceof Node) {
+			el.appendChild(child);
+		} else if(Array.isArray(child)) {
+			append(el, ...child);
+		} else {
+			el.appendChild(new Text(child));
+		}
+	}
+	return el;
+}
+
+document.addEventListener("submit", function(e) {
+	e.preventDefault();
+	try {
+		dietFile = parseDietFile(find("#input").value);
+	} catch(e) {
+		document.body.innerHTML = "";
+		append(document.body, mk("pre", {}, e));
+		return;
+	}
+	document.body.innerHTML = "";
+	append(document.body, formatDietFile(dietFile));
+});
+
+function parseDietFile(str) {
+	var lines = str.split("\n").map(x=>x.trim());
+	var state = "start";
+	var i = 0;
+	var metadata = {};
+	var schedule = [];
+	var comments = [];
+	while(1) {
+		if(i == lines.length) break;
+		var line = lines[i];
+		switch(state) {
+		case "start":
+			// Skip blank lines at start
+			if(!line) {
+				i++;
+				break;
+			}
+			state = "metadata";
+			break;
+		case "metadata":
+			if(!line) {
+				state = "after-metadata";
+				break;
+			}
+			var [k, _, v] = partition(line, ":");
+			if(!_) error(`Metadata line didn't contain a : character.`, i, lines);
+			metadata[k] = v.trim();
+			i++;
+			break;
+		case "after-metadata":
+			if(!line) {
+				i++;
+				break;
+			}
+			state = "schedule";
+			break;
+		case "schedule":
+			if(!line) {
+				state = "after-schedule";
+				break;
+			}
+			var [ampm, days, food] = split(line, /\s+/, 3);
+			if(!ampm || !days || !food) {
+				error(`Schedule format is "<am-or-pm> <days> <food>".`, i, lines);
+			}
+			ampm = parseAmpm(ampm, i, lines);
+			days = parseDays(days, i, lines);
+			food = parseFood(food, i, lines);
+			schedule.push({ampm, days, food});
+			i++;
+			break;
+		case "after-schedule":
+			if(!line) {
+				i++;
+				break;
+			}
+			state = "comments";
+			break;
+		case "comments":
+			comments.push(line);
+			i++;
+			break;
+		}
+	}
+	return {metadata, schedule, comments};
+}
+
+function parseAmpm(ampm, i, lines) {
+	ampm = ampm.toLowerCase();
+	if(!(ampm == "am" || ampm == "pm")) {
+		error("Schedule line must start with 'am' or 'pm'.", i, lines);
+	}
+	return ampm;
+}
+
+function parseDays(str, i, lines) {
+	if(str.toLowerCase() == "daily") {
+		return {su:true, mo:true, tu:true, we:true, th:true, fr:true, sa:true};
+	}
+	if(!/[A-Z][A-Za-z]*/.test(str)) error("After am/pm, must be a list of days, like 'MWF', or 'daily'.", i, lines);
+	const days = {su:false, mo:false, tu:false, we:false, th:false, fr:false, sa:false};
+	// Split on capitals, match on prefixes
+	while(str) {
+		const match = /[A-Z][a-z]*/.exec(str);
+		const day = parseDay(match[0], i, lines);
+		days[day] = true;
+		str = str.slice(match.index + match[0].length);
+	}
+	return days;
+}
+
+function parseDay(str, i, lines) {
+	const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+	const possible = days.filter(x=>x.startsWith(str));
+	if(possible.length == 1) return possible[0].slice(0,2).toLowerCase();
+	if(possible.length == 0) error(`"${str}" isn't a valid prefix of any day of the week.`, i, lines);
+	if(possible.length >= 2) error(`"${str}" is ambiguous; please provide more letters of the days.`, i, lines);
+}
+
+function parseFood(str, i, lines) {
+	const match = /^(\d+g)\s+(.+)/.exec(str);
+	if(match) {
+		return {quantity: match[1], item:match[2].trim()};
+	} else {
+		return {item:str.trim()}
+	}
+}
+
+function error(msg, i, lines) {
+	throw `Error on line ${i}: "${lines[i]}"\n${msg}`;
+}
+
+function formatDietFile(df) {
+	return [
+		mk("header", {},
+			mk("h1", {}, "Happy Hollow Zoo"),
+			mk("h2", {}, "Diet Record")
+		),
+		mk("dl", {"class":"metadata"},
+			...df.metadata.map(([k,v])=>
+				[
+					mk("dt", {}, k, ":"),
+					mk("dd", {}, v)
+				]
+			)
+		),
+		mk("table", {"class":"food"},
+			mk("thead", {},
+				mk("tr", {},
+					mk("th", {}, "Item"),
+					mk("th", {}, "Food Type"),
+					mk("th", {}, "Weight"),
+					mk("th", {"colspan":2}, "Time"),
+					mk("th", {"colspan":7}, "Day")
+				)
+			),
+			mk("tbody", {},
+				...df.schedule.map(formatScheduleRow)
+			)
+		),
+		formatComments(df.comments),
+		mk("style",{}, dietFileStyle())
+	];
+}
+
+function formatScheduleRow(item, i) {
+	return mk("tr", {},
+		mk("td", {"class":"item-num"}, `${i+1}`),
+		mk("td", {"class":"item-food"}, item.food.item),
+		mk("td", {"class":"item-quantity"}, item.food.quantity || "—"),
+		mk("td", {"class":"item-ampm"}, item.ampm.toUpperCase()=="AM" ? "AM" : ""),
+		mk("td", {"class":"item-ampm"}, item.ampm.toUpperCase()=="PM" ? "PM" : ""),
+		mk("td", {"class":`item-day su ${item.days.su?"yes":"no"}`}, item.days.su ? "Su" : ""),
+		mk("td", {"class":`item-day mo ${item.days.mo?"yes":"no"}`}, item.days.mo ? "M" : ""),
+		mk("td", {"class":`item-day tu ${item.days.tu?"yes":"no"}`}, item.days.tu ? "Tu" : ""),
+		mk("td", {"class":`item-day we ${item.days.we?"yes":"no"}`}, item.days.we ? "W" : ""),
+		mk("td", {"class":`item-day th ${item.days.th?"yes":"no"}`}, item.days.th ? "Th" : ""),
+		mk("td", {"class":`item-day fr ${item.days.fr?"yes":"no"}`}, item.days.fr ? "F" : ""),
+		mk("td", {"class":`item-day sa ${item.days.sa?"yes":"no"}`}, item.days.sa ? "Sa" : "")
+	);
+}
+
+function formatComments(comments) {
+	if(comments.length == 0) return [];
+	return mk("pre", {"class":"comments"}, comments.join("\n"));
+}
+
+function dietFileStyle() {
+	return `
+body {
+	margin: 0 auto;
+	padding: 0;
+	max-width: 9in;
+	height: 100%;
+	display: grid;
+	grid-template:
+		"header" auto
+		"metadata" auto
+		"diet" minmax(0, 1fr)
+		/ 1fr;
+	font-family: sans-serif;
+}
+header {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	padding: 1em 2em;
+	align-items: center;
+}
+header > * {
+	margin: 0;
+}
+header > h2 {
+	text-align: right;
+	text-transform: uppercase;
+}
+.metadata {
+	display: grid;
+	grid-template-columns: 1fr 1fr 1fr 1fr;
+	gap: .5em 1em;
+}
+.metadata > dt {
+	text-align: right;
+	font-weight: bold;
+}
+.metadata > dd {
+	margin: 0;
+}
+.food {
+	margin: 2em 3em 1em;
+	border-collapse: collapse;
+	-webkit-print-color-adjust: exact;
+	color-adjust: exact;
+}
+.food td {
+	padding: .3em .2em;
+}
+.food tbody {
+	border: thin solid black;
+}
+.food tbody tr {
+	border: 1px solid black;
+	border-style: solid none;
+}
+.food tbody tr:nth-child(even) {
+	/background: rgba(0,0,0,.05);
+}
+.item-day.yes {
+	background: rgba(0,0,0,.1);
+}
+.item-num {
+	text-align: center;
+	font-weight: bold;
+	width: 4em;
+}
+.item-food {
+}
+.item-quantity {
+	text-align: center;
+	width: 3em;
+	border-right: thin solid #ccc;
+}
+.item-ampm {
+	text-align: center;
+	width: 1.5em;
+}
+.item-day.su {
+	border-left: thin solid #ccc;
+}
+.item-day {
+	text-align: center;
+	width: 1.5em;
+}
+.item-day.yes {
+}
+.comments {
+	white-space: pre-wrap;
+	font-family: sans-serif;
+	margin: 1em 3em;
+}
+`
+}
+</script>
