@@ -116,13 +116,17 @@ function mk(tagname, attrs, ...children) {
 	return el;
 }
 function append(el, ...children) {
+	const appendChild = (container, child) => {
+		if(container instanceof Node) container.appendChild(child);
+		else container.push(child);
+	}
 	for(const child of children) {
 		if(child instanceof Node) {
-			el.appendChild(child);
+			appendChild(el, child);
 		} else if(Array.isArray(child)) {
 			append(el, ...child);
 		} else {
-			el.appendChild(new Text(child));
+			appendChild(el, new Text(child));
 		}
 	}
 	return el;
@@ -146,7 +150,7 @@ function parseDietFile(str) {
 	var state = "start";
 	var i = 0;
 	var metadata = {};
-	var schedule = [];
+	var schedule = {am:[], pm:[]};
 	var comments = [];
 	while(1) {
 		if(i == lines.length) break;
@@ -189,7 +193,7 @@ function parseDietFile(str) {
 			ampm = parseAmpm(ampm, i, lines);
 			days = parseDays(days, i, lines);
 			food = parseFood(food, i, lines);
-			schedule.push({ampm, days, food});
+			schedule[ampm.toLowerCase()].push({ampm, days, food});
 			i++;
 			break;
 		case "after-schedule":
@@ -209,8 +213,8 @@ function parseDietFile(str) {
 }
 
 function parseAmpm(ampm, i, lines) {
-	ampm = ampm.toLowerCase();
-	if(!(ampm == "am" || ampm == "pm")) {
+	ampm = ampm.toUpperCase();
+	if(!(ampm == "AM" || ampm == "PM")) {
 		error("Schedule line must start with 'am' or 'pm'.", i, lines);
 	}
 	return ampm;
@@ -278,7 +282,7 @@ function formatDietFile(df) {
 				)
 			),
 			mk("tbody", {},
-				...df.schedule.map(formatScheduleRow)
+				...formatScheduleRows(df.schedule)
 			)
 		),
 		formatComments(df.comments),
@@ -286,21 +290,40 @@ function formatDietFile(df) {
 	];
 }
 
+function formatScheduleRows(schedule) {
+	const rows = [];
+	append(rows, schedule.am.map(formatScheduleRow));
+	if(schedule.am.length && schedule.pm.length) {
+		append(rows, mk("tr", {"class":"empty"}));
+	}
+	append(rows, schedule.pm.map(formatScheduleRow));
+	return rows;
+}
+
 function formatScheduleRow(item, i) {
-	return mk("tr", {},
-		mk("td", {"class":"item-num"}, `${i+1}`),
+	const tr = mk("tr", {},
+		mk("td", {"class":"item-num"}),
 		mk("td", {"class":"item-food"}, item.food.item),
 		mk("td", {"class":"item-quantity"}, item.food.quantity || "—"),
-		mk("td", {"class":"item-ampm"}, item.ampm.toUpperCase()=="AM" ? "AM" : ""),
-		mk("td", {"class":"item-ampm"}, item.ampm.toUpperCase()=="PM" ? "PM" : ""),
-		mk("td", {"class":`item-day su ${item.days.su?"yes":"no"}`}, item.days.su ? "Su" : ""),
-		mk("td", {"class":`item-day mo ${item.days.mo?"yes":"no"}`}, item.days.mo ? "M" : ""),
-		mk("td", {"class":`item-day tu ${item.days.tu?"yes":"no"}`}, item.days.tu ? "Tu" : ""),
-		mk("td", {"class":`item-day we ${item.days.we?"yes":"no"}`}, item.days.we ? "W" : ""),
-		mk("td", {"class":`item-day th ${item.days.th?"yes":"no"}`}, item.days.th ? "Th" : ""),
-		mk("td", {"class":`item-day fr ${item.days.fr?"yes":"no"}`}, item.days.fr ? "F" : ""),
-		mk("td", {"class":`item-day sa ${item.days.sa?"yes":"no"}`}, item.days.sa ? "Sa" : "")
+		mk("td", {"class":"item-ampm am"}, item.ampm=="AM" ? "AM" : ""),
+		mk("td", {"class":"item-ampm pm"}, item.ampm=="PM" ? "PM" : "")
 	);
+	if([...iter(item.days)].every(x=>x[1])) {
+		append(tr,
+			mk("td", {"class":"item-day daily yes", "colspan":7}, "daily")
+		);
+	} else {
+		append(tr,
+			mk("td", {"class":`item-day su ${item.days.su?"yes":"no"}`}, item.days.su ? "Su" : ""),
+			mk("td", {"class":`item-day mo ${item.days.mo?"yes":"no"}`}, item.days.mo ? "M" : ""),
+			mk("td", {"class":`item-day tu ${item.days.tu?"yes":"no"}`}, item.days.tu ? "Tu" : ""),
+			mk("td", {"class":`item-day we ${item.days.we?"yes":"no"}`}, item.days.we ? "W" : ""),
+			mk("td", {"class":`item-day th ${item.days.th?"yes":"no"}`}, item.days.th ? "Th" : ""),
+			mk("td", {"class":`item-day fr ${item.days.fr?"yes":"no"}`}, item.days.fr ? "F" : ""),
+			mk("td", {"class":`item-day sa ${item.days.sa?"yes":"no"}`}, item.days.sa ? "Sa" : "")
+		);
+	}
+	return tr;
 }
 
 function formatComments(comments) {
@@ -359,21 +382,23 @@ header > h2 {
 }
 .food tbody {
 	border: thin solid black;
+	counter-reset: item;
 }
 .food tbody tr {
 	border: 1px solid black;
 	border-style: solid none;
 }
-.food tbody tr:nth-child(even) {
-	/background: rgba(0,0,0,.05);
-}
-.item-day.yes {
-	background: rgba(0,0,0,.1);
+.food tr.empty {
+	height: 1em;
 }
 .item-num {
 	text-align: center;
 	font-weight: bold;
 	width: 4em;
+	counter-increment: item;
+}
+.item-num::before {
+	content: counter(item);
 }
 .item-food {
 }
@@ -386,14 +411,18 @@ header > h2 {
 	text-align: center;
 	width: 1.5em;
 }
-.item-day.su {
-	border-left: thin solid #ccc;
+.item-ampm.pm {
+	border-right: thin solid #ccc;
 }
 .item-day {
 	text-align: center;
 	width: 1.5em;
 }
 .item-day.yes {
+	background: rgba(0,0,0,.1);
+}
+.item-day.daily {
+	letter-spacing: .1em;
 }
 .comments {
 	white-space: pre-wrap;
