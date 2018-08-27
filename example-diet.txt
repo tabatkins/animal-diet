@@ -1,0 +1,16 @@
+Species: Striped skunk
+House name: Stripes
+Local ID: 200534
+Date of birth: May 1, 2011
+Sex: M/C
+Routine: Lodge
+Location:
+
+AM Daily 14g small chop
+AM Daily 6g Mazuri insectivore
+PM Daily 14g small chop
+PM Daily 0.5mL EFAs
+PM Daily 18g Mazuri insectivore
+PM MWFSu 9g small mice
+PM TuThSa 1/2 hard boiled egg
+PM Daily 2 superworms
