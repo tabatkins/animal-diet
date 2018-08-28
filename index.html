@@ -287,6 +287,12 @@ function formatDietFile(df) {
 			)
 		),
 		formatComments(df.comments),
+		mk("p", {"class":"updated"},
+			mk("small", {},
+				"Last updated ",
+				(new Date).toLocaleDateString("en-us", {day:"numeric", month:"short", year:"numeric"})
+			)
+		),
 		mk("style",{}, dietFileStyle())
 	];
 }
@@ -334,6 +340,9 @@ function formatComments(comments) {
 
 function dietFileStyle() {
 	return `
+html {
+	height: 100%;
+}
 body {
 	margin: 0 auto;
 	padding: 0;
@@ -343,11 +352,14 @@ body {
 	grid-template:
 		"header" auto
 		"metadata" auto
-		"diet" minmax(0, 1fr)
+		"diet" auto
+		"comments" 1fr
+		"updated" auto
 		/ 1fr;
 	font-family: sans-serif;
 }
 header {
+	grid-area: header;
 	display: grid;
 	grid-template-columns: 1fr 1fr;
 	padding: 1em 2em;
@@ -361,6 +373,7 @@ header > h2 {
 	text-transform: uppercase;
 }
 .metadata {
+	grid-area: metadata;
 	display: grid;
 	grid-template-columns: 1fr 1fr 1fr 1fr;
 	gap: .5em 1em;
@@ -373,6 +386,7 @@ header > h2 {
 	margin: 0;
 }
 .food {
+	grid-area: diet;
 	margin: 2em 3em 1em;
 	border-collapse: collapse;
 	-webkit-print-color-adjust: exact;
@@ -426,9 +440,13 @@ header > h2 {
 	letter-spacing: .1em;
 }
 .comments {
+	grid-area: comments;
 	white-space: pre-wrap;
 	font-family: sans-serif;
 	margin: 1em 3em;
+}
+.updated {
+	grid-area: updated;
 }
 `
 }
