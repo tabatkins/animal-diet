@@ -90,6 +90,16 @@ function split(str, sep, limit) {
 		str = str.slice(match.index + match[0].length);
 	}
 }
+function byKey(keyFn) {
+	// Create a comparator function from a key function
+	return (a,b) => {
+		const keyA = keyFn(a);
+		const keyB = keyFn(b);
+		if(keyA == keyB) return 0;
+		if(keyA < keyB) return -1;
+		return 1;
+	}
+}
 function mk(tagname, attrs, ...children) {
 	const el = document.createElement(tagname);
 	for(const [k,v] of iter(attrs)) {
@@ -299,12 +309,16 @@ function formatDietFile(df) {
 
 function formatScheduleRows(schedule) {
 	const rows = [];
-	append(rows, schedule.am.map(formatScheduleRow));
+	append(rows, schedule.am.sort(byKey(keyFromScheduleRow)).map(formatScheduleRow));
 	if(schedule.am.length && schedule.pm.length) {
 		append(rows, mk("tr", {"class":"empty"}));
 	}
-	append(rows, schedule.pm.map(formatScheduleRow));
+	append(rows, schedule.pm.sort(byKey(keyFromScheduleRow)).map(formatScheduleRow));
 	return rows;
+}
+
+function keyFromScheduleRow(row) {
+	return iter(row.days).map(([k,v])=>v?"0":"1").join("");
 }
 
 function formatScheduleRow(item, i) {
