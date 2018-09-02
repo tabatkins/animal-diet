@@ -137,16 +137,16 @@ find('#input-file').addEventListener('change', function(e) {
 	if(files.length != 1) return;
 	const reader = new FileReader();
 	reader.readAsText(files[0]);
-	reader.onload = e=>processDietFile(e.target.result);
+	reader.onload = e=>processDietFile(e.target.result, files[0].name);
 });
 document.addEventListener("submit", function(e) {
 	e.preventDefault();
 	processDietFile(find("#input").value);
 });
 
-function processDietFile(str) {
+function processDietFile(str, filename) {
 	try {
-		const dietFile = parseDietFile(str);
+		const dietFile = parseDietFile(str, filename);
 		document.body.innerHTML = "";
 		append(document.body, formatDietFile(dietFile));
 	} catch(e) {
@@ -156,13 +156,20 @@ function processDietFile(str) {
 	}
 }
 
-function parseDietFile(str) {
-	var lines = str.split("\n").map(x=>x.trim());
-	var state = "start";
-	var i = 0;
-	var metadata = {};
-	var schedule = {am:[], pm:[]};
-	var comments = [];
+function parseDietFile(str, filename) {
+	// Parse the filename
+	let match = /\b(\d{4}-\d{2}-\d{2})\b/.exec(filename);
+	let lastUpdated = null;
+	if(match) {
+		lastUpdated = new Date(match[1]);
+	}
+	// Parse the lines
+	const lines = str.split("\n").map(x=>x.trim());
+	let state = "start";
+	let i = 0;
+	const metadata = {};
+	const schedule = {am:[], pm:[]};
+	const comments = [];
 	while(1) {
 		if(i == lines.length) break;
 		var line = lines[i];
@@ -220,7 +227,7 @@ function parseDietFile(str) {
 			break;
 		}
 	}
-	return {metadata, schedule, comments};
+	return {metadata, schedule, comments, lastUpdated};
 }
 
 function parseAmpm(ampm, i, lines) {
@@ -297,12 +304,7 @@ function formatDietFile(df) {
 			)
 		),
 		formatComments(df.comments),
-		mk("p", {"class":"updated"},
-			mk("small", {},
-				"Last updated ",
-				(new Date).toLocaleDateString("en-us", {day:"numeric", month:"short", year:"numeric"})
-			)
-		),
+		formatLastUpdated(df.lastUpdated),
 		mk("style",{}, dietFileStyle())
 	];
 }
@@ -350,6 +352,20 @@ function formatScheduleRow(item, i) {
 function formatComments(comments) {
 	if(comments.length == 0) return [];
 	return mk("pre", {"class":"comments"}, comments.join("\n"));
+}
+
+function formatLastUpdated(lastUpdated) {
+	if(lastUpdated) {
+		var dateString = [lastUpdated.toLocaleDateString("en-us", {day:"numeric", month:"short", year:"numeric", timeZone:"UTC"})];
+	} else {
+		var dateString = ["??? ", mk("small", {"class":"no-print"}, "(Put a YYYY-MM-DD date into the filename.)")];
+	}
+	return mk("p", {"class":"updated"},
+		mk("small", {},
+			"Last updated ",
+			dateString
+		)
+	);
 }
 
 function dietFileStyle() {
@@ -461,6 +477,10 @@ header > h2 {
 }
 .updated {
 	grid-area: updated;
+}
+
+@media print {
+	.no-print { display: none; }
 }
 `
 }
