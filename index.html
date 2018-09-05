@@ -103,10 +103,10 @@ function byKey(keyFn) {
 function mk(tagname, attrs, ...children) {
 	const el = document.createElement(tagname);
 	for(const [k,v] of iter(attrs)) {
-		if(k == "_props") {
-			for(const [k,v] of iter(v)) {
-				el[k] = v;
-			}
+		if(k[0] == "_") {
+			// property, not attribute
+			k = k.slice(1);
+			el[k] = v;
 		} else {
 			el.setAttribute(k, v);
 		}
